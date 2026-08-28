@@ -1,0 +1,11 @@
+# никогда не коммитьте сессию и конфиг с секретами
+session_DO_NOT_SHARE.json
+*.session
+
+# бинaрь
+/sniper
+sniper
+*.exe
+
+# логи
+*.log
