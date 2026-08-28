@@ -26,9 +26,9 @@
 Забудьте про ручную правку `config.json`. Если вы пользуетесь ИИ-помощником — скопируйте этот промт, и он настроит всё сам:
 
 ```
-Вот репозиторий снайпера Telegram-юзернеймов: TUS (Go).
+Вот репозиторий снайпера Telegram-юзернеймов: TUS (Go) — https://github.com/ixode0/TUS.git
 
-1. Склонируй репо из корня, выполни go mod tidy и собери: go build -o sniper ./cmd/app (Go 1.25+, модуль app, бинарь окажется рядом с config.json).
+1. Склонируй: git clone https://github.com/ixode0/TUS.git && cd TUS, затем выполни go mod tidy и собери: go build -o sniper ./cmd/app (Go 1.25+, модуль app, бинарь окажется рядом с config.json).
 2. Запроси у пользователя по очереди:
    - API ID и API Hash (он их получит на https://my.telegram.org → API development tools)
    - номер телефона в международном формате (+..., с плюсом — валидация строгая)
@@ -48,9 +48,9 @@
 Forget manual `config.json` editing. If you use an AI assistant — copy this prompt and it will set everything up:
 
 ```
-Here's the Telegram username sniper repository: TUS (Go).
+Here's the Telegram username sniper repository: TUS (Go) — https://github.com/ixode0/TUS.git
 
-1. Clone the repo from its root, run go mod tidy and build: go build -o sniper ./cmd/app (Go 1.25+, module app, binary lands next to config.json).
+1. Clone: git clone https://github.com/ixode0/TUS.git && cd TUS, then run go mod tidy and build: go build -o sniper ./cmd/app (Go 1.25+, module app, binary lands next to config.json).
 2. Ask the user step-by-step for:
    - API ID and API Hash (from https://my.telegram.org → API development tools)
    - phone number in international format (+..., with plus — strict validation)
