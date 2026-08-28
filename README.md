@@ -10,6 +10,14 @@
   <b>TUS</b> — <i>Telegram Username Sniper</i>
 </p>
 
+<p align="center">
+  <a href="https://github.com/ixode0/TUS/stargazers"><img src="https://img.shields.io/github/stars/ixode0/TUS?style=flat&logo=github" alt="Stars" /></a>
+  <a href="https://github.com/ixode0/TUS/blob/main/LICENSE"><img src="https://img.shields.io/github/license/ixode0/TUS" alt="License" /></a>
+  <img src="https://img.shields.io/badge/Go-1.25-%2300ADD8?logo=go" alt="Go 1.25" />
+  <img src="https://img.shields.io/badge/gotd%2Ftd-v0.161.0-blue" alt="gotd/td" />
+  <img src="https://img.shields.io/badge/fragment.com-monitor-0098EA" alt="fragment" />
+</p>
+
 # TUS
 
 🇷🇺 Молниеносный снайпер Telegram-юзернеймов на **Go**. Автоматически мониторит и забирает юзернеймы, как только они становятся доступны.
