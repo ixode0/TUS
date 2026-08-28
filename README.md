@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="tus_logo.jpg" alt="TUS logo" width="320" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="tus_logo.png">
+    <source media="(prefers-color-scheme: light)" srcset="tus_logo_dark.png">
+    <img src="tus_logo.png" alt="TUS logo" width="320" />
+  </picture>
 </p>
 
 <p align="center">
