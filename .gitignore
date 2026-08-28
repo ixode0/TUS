@@ -2,10 +2,12 @@
 session_DO_NOT_SHARE.json
 *.session
 
-# бинaрь
-/sniper
+# бинaрь (только файл в корне, не пакет telegram/sniper)
 sniper
+/sniper
 *.exe
+!telegram/sniper/
+!telegram/sniper/**
 
 # логи
 *.log

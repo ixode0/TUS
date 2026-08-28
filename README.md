@@ -28,18 +28,18 @@
 ```
 Вот репозиторий снайпера Telegram-юзернеймов: TUS (Go).
 
-1. Склонируй репо, выполни go mod tidy и собери (go build -o sniper ./cmd/app).
+1. Склонируй репо из корня, выполни go mod tidy и собери: go build -o sniper ./cmd/app (Go 1.25+, модуль app, бинарь окажется рядом с config.json).
 2. Запроси у пользователя по очереди:
    - API ID и API Hash (он их получит на https://my.telegram.org → API development tools)
-   - номер телефона в международном формате (+...)
-   - список юзернеймов для мониторинга
-   - способ клейма: channel (канал) или user (аккаунт)
-   - паузу между проверками (мс)
-3. Заполни config.json этими данными.
-4. Запусти ./sniper.
-5. При первом запуске программа запросит код авторизации — попроси его у пользователя и передай программе (или положи в /tmp/tg_code.txt).
-6. Сессия сохранится в session_DO_NOT_SHARE.json — добавь его в .gitignore и никому не показывай.
-7. Если снайпер не смог забрать юзернейм сразу — он будет ретраить каждые 1.5с, это нормально. Отчитайся пользователю, когда юзернейм будет успешно захвачен.
+   - номер телефона в международном формате (+..., с плюсом — валидация строгая)
+   - список юзернеймов для мониторинга (массив usernames, без @)
+   - способ клейма: channel (создать публичный канал с title = username и затем установить юзернейм) или user (account.updateUsername на аккаунт)
+   - паузу между проверками в мс (sleep_between_check, рекомендуется 100, <50 — уже риск FloodWait)
+3. Заполни config.json этими данными (лежит в корне репо; можно переопределить путь через env CONFIG_PATH).
+4. Запусти ./sniper рядом с config.json.
+5. При первом запуске программа запросит код авторизации — попроси его у пользователя и передай программе через stdin. Для автоматики: можно заранее задать env TG_CODE или положить код в файл /tmp/tg_code.txt (файл удалится после чтения). Если у аккаунта включена 2FA — следующим шагом запросит пароль (Enter your password:).
+6. Сессия сохранится в session_DO_NOT_SHARE.json рядом с бинарём (FileStorage) — добавь его в .gitignore и никому не показывай.
+7. Если снайпер не смог забрать юзернейм сразу — он будет ретраить каждые 1.5с бесконечно (отдельная горутина на каждый юзернейм), с корректной обработкой FloodWait (ждёт указанное время) и остановкой при USERNAME_OCCUPIED / USERNAME_NOT_AVAILABLE. Отчитайся пользователю, когда юзернейм будет успешно захвачен (лог [Successfully claimed: ...]).
 ```
 
 Этот промт особенно удобен, если у пользователя нет окружения Go — ИИ сделает сборку и запуск за него.
@@ -50,18 +50,18 @@ Forget manual `config.json` editing. If you use an AI assistant — copy this pr
 ```
 Here's the Telegram username sniper repository: TUS (Go).
 
-1. Clone the repo, run go mod tidy and build (go build -o sniper ./cmd/app).
+1. Clone the repo from its root, run go mod tidy and build: go build -o sniper ./cmd/app (Go 1.25+, module app, binary lands next to config.json).
 2. Ask the user step-by-step for:
    - API ID and API Hash (from https://my.telegram.org → API development tools)
-   - phone number in international format (+...)
-   - list of usernames to monitor
-   - claim method: channel or user
-   - delay between checks (ms)
-3. Fill config.json with this data.
-4. Run ./sniper.
-5. On first launch the app will request an auth code — ask the user for it and pass it to the app (or put it in /tmp/tg_code.txt).
-6. Session will be saved to session_DO_NOT_SHARE.json — add it to .gitignore and never share it.
-7. If the sniper fails to claim immediately — it will retry every 1.5s, that's normal. Notify the user when the username is successfully claimed.
+   - phone number in international format (+..., with plus — strict validation)
+   - list of usernames to monitor (usernames array, without @)
+   - claim method: channel (create public channel with title = username then set username) or user (account.updateUsername on the account)
+   - delay between checks in ms (sleep_between_check, recommended 100, <50 risks FloodWait)
+3. Fill config.json with this data (located at repo root; path can be overridden via env CONFIG_PATH).
+4. Run ./sniper next to config.json.
+5. On first launch the app will request an auth code — ask the user for it and pass it via stdin. For automation: pre-set env TG_CODE or put the code into /tmp/tg_code.txt (file is deleted after reading). If the account has 2FA enabled — next it will ask for password (Enter your password:).
+6. Session will be saved to session_DO_NOT_SHARE.json next to the binary (FileStorage) — add it to .gitignore and never share it.
+7. If the sniper fails to claim immediately — it will retry every 1.5s forever (separate goroutine per username), with proper FloodWait handling (waits the required duration) and stopping on USERNAME_OCCUPIED / USERNAME_NOT_AVAILABLE. Notify the user when the username is successfully claimed (log [Successfully claimed: ...]).
 ```
 
 This prompt is especially handy if the user has no Go environment — the AI will handle build and run.
@@ -222,9 +222,9 @@ go build -o sniper ./cmd/app
 ./sniper
 ```
 
-При первом запуске будет запрошен код авторизации из Telegram — он придёт в приложение аккаунта. После этого сессия сохранится в `session_DO_NOT_SHARE.json` (не делитесь и не коммитьте этот файл).
+При первом запуске будет запрошен код авторизации из Telegram — он придёт в приложение аккаунта. Если включена 2FA — далее запросит пароль (`Enter your password:`). После этого сессия сохранится в `session_DO_NOT_SHARE.json` (не делитесь и не коммитьте этот файл).
 
-> Не-интерактивный запуск: код можно подложить в `TG_CODE` или файл `/tmp/tg_code.txt` (удалится после чтения).
+> Не-интерактивный запуск: код можно подложить в `TG_CODE` (env) или файл `/tmp/tg_code.txt` (удалится после чтения). Пароль 2FA при необходимости — через stdin (скрытый ввод).
 
 ### 🇬🇧 English
 ```bash
@@ -242,9 +242,9 @@ go build -o sniper ./cmd/app
 ./sniper
 ```
 
-On first launch you'll be asked for the Telegram auth code — it will arrive in your account's app. Afterwards the session is saved to `session_DO_NOT_SHARE.json` (do not share or commit this file).
+On first launch you'll be asked for the Telegram auth code — it will arrive in your account's app. If 2FA is enabled — it will then ask for password (`Enter your password:`). Afterwards the session is saved to `session_DO_NOT_SHARE.json` (do not share or commit this file).
 
-> Non-interactive run: you can provide the code via `TG_CODE` env or `/tmp/tg_code.txt` file (deleted after reading).
+> Non-interactive run: you can provide the code via `TG_CODE` env or `/tmp/tg_code.txt` file (deleted after reading). 2FA password if needed — via stdin (hidden input).
 
 ---
 
