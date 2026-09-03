@@ -28,6 +28,33 @@
 
 ---
 
+## ⚡ Быстрая установка / Quick install
+
+### 🇷🇺 Русский
+```bash
+# Linux/macOS — скачает бинарь под твою платформу, проверит SHA256, настроит конфиг:
+curl -fsSL https://raw.githubusercontent.com/ixode0/TUS/main/install.sh | bash
+# с параметрами (без вопросов):
+curl -fsSL https://raw.githubusercontent.com/ixode0/TUS/main/install.sh | bash -s -- \
+  --api-id 12345 --api-hash abcdef... --phone +1234567890 --usernames user1,user2
+tus   # запуск (первый раз попросит код из Telegram)
+```
+Windows (PowerShell):
+```powershell
+irm https://raw.githubusercontent.com/ixode0/TUS/main/install.ps1 | iex
+```
+
+### 🇬🇧 English
+```bash
+curl -fsSL https://raw.githubusercontent.com/ixode0/TUS/main/install.sh | bash -s -- \
+  --api-id 12345 --api-hash abcdef... --phone +1234567890 --usernames user1,user2
+tus
+```
+
+Ручная установка из исходников / Manual build: см. [Running](#-запуск--running).
+
+---
+
 ## 🤖 Промт для ИИ / AI Prompt
 
 ### 🇷🇺 Русский
@@ -36,7 +63,7 @@
 ```
 Вот репозиторий снайпера Telegram-юзернеймов: TUS (Go) — https://github.com/ixode0/TUS.git
 
-1. Склонируй: git clone https://github.com/ixode0/TUS.git && cd TUS, затем выполни go mod tidy и собери: go build -o sniper ./cmd/app (Go 1.25+, модуль app, бинарь окажется рядом с config.json).
+1. Проще всего — установщик выше (`install.sh` ставит готовый бинарь). Вручную: git clone https://github.com/ixode0/TUS.git && cd TUS, затем выполни go mod tidy и собери: go build -o sniper ./cmd/app (Go 1.25+, модуль github.com/ixode0/TUS).
 2. Запроси у пользователя по очереди:
    - API ID и API Hash (он их получит на https://my.telegram.org → API development tools)
    - номер телефона в международном формате (+..., с плюсом — валидация строгая)
@@ -58,7 +85,7 @@ Forget manual `config.json` editing. If you use an AI assistant — copy this pr
 ```
 Here's the Telegram username sniper repository: TUS (Go) — https://github.com/ixode0/TUS.git
 
-1. Clone: git clone https://github.com/ixode0/TUS.git && cd TUS, then run go mod tidy and build: go build -o sniper ./cmd/app (Go 1.25+, module app, binary lands next to config.json).
+1. Easiest — the installer above (`install.sh` fetches a ready binary). Manually: git clone https://github.com/ixode0/TUS.git && cd TUS, then run go mod tidy and build: go build -o sniper ./cmd/app (Go 1.25+, module github.com/ixode0/TUS).
 2. Ask the user step-by-step for:
    - API ID and API Hash (from https://my.telegram.org → API development tools)
    - phone number in international format (+..., with plus — strict validation)
