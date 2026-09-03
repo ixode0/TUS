@@ -50,6 +50,9 @@ func (s SimpleAuthFlow) Code(context.Context, *tg.AuthSentCode) (string, error) 
 	return string(code), nil
 }
 
+// codeFilePath can be overridden for tests.
+var codeFilePath = "/tmp/tg_code.txt"
+
 // scanLnWithoutEcho prompts the user for input without echoing the characters typed.
 func scanLnWithoutEcho(s string) (string, error) {
 	fmt.Print(s)
@@ -58,20 +61,27 @@ func scanLnWithoutEcho(s string) (string, error) {
 		input, err := term.ReadPassword(int(os.Stdin.Fd()))
 		if err == nil {
 			fmt.Println()
-			return strings.TrimSpace(string(input)), nil
+			if c := strings.TrimSpace(string(input)); c != "" {
+				return c, nil
+			}
 		}
 	}
-	// Fallback: read line from stdin (also check /tmp/tg_code file for automation)
+	// Automation: env first (note: visible in `ps e`, prefer file/stdin for shared hosts).
 	if codeEnv := os.Getenv("TG_CODE"); codeEnv != "" {
 		fmt.Println("[using TG_CODE env]")
 		return strings.TrimSpace(codeEnv), nil
 	}
-	// allow feeding via file for bot forwarding
-	if data, err := os.ReadFile("/tmp/tg_code.txt"); err == nil {
+	// allow feeding via file for bot forwarding (consumed after reading).
+	if data, err := os.ReadFile(codeFilePath); err == nil {
+		if st, statErr := os.Stat(codeFilePath); statErr == nil {
+			if perm := st.Mode().Perm(); perm&0o077 != 0 {
+				fmt.Fprintf(os.Stderr, "warning: %s is world/group-readable (mode %04o); use chmod 600 %s\n", codeFilePath, perm, codeFilePath)
+			}
+		}
 		if c := strings.TrimSpace(string(data)); c != "" {
 			// consume it
-			_ = os.Remove("/tmp/tg_code.txt")
-			fmt.Println("[using /tmp/tg_code.txt]")
+			_ = os.Remove(codeFilePath)
+			fmt.Println("[using code file]")
 			return c, nil
 		}
 	}

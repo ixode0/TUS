@@ -1,6 +1,10 @@
 # никогда не коммитьте сессию и конфиг с секретами
 session_DO_NOT_SHARE.json
 *.session
+config.json
+
+# пример конфига — трекается
+!config.example.json
 
 # бинaрь (только файл в корне, не пакет telegram/sniper)
 sniper
@@ -9,5 +13,11 @@ sniper
 !telegram/sniper/
 !telegram/sniper/**
 
+# код для автоматики — никогда не коммитить
+tg_code.txt
+
 # логи
 *.log
+
+# Go
+/dist/

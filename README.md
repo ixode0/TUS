@@ -159,7 +159,7 @@ This prompt is especially handy if the user has no Go environment — the AI wil
 ## 🔧 Конфигурация / Configuration
 
 ### 🇷🇺 Русский
-Скопируйте `config.json` и заполните:
+Скопируйте `config.example.json` в `config.json` и заполните (`config.json` в `.gitignore` — секреты никогда не коммитятся):
 
 ```json
 {
@@ -185,7 +185,7 @@ This prompt is especially handy if the user has no Go environment — the AI wil
 | `usernames` | Список юзернеймов для мониторинга (например `["dead", "devious"]`) |
 
 ### 🇬🇧 English
-Copy `config.json` and fill it:
+Copy `config.example.json` to `config.json` and fill it (`config.json` is git-ignored — secrets are never committed):
 
 ```json
 {
@@ -217,11 +217,10 @@ Copy `config.json` and fill it:
 ### 🇷🇺 Русский
 ```bash
 # Требуется Go 1.25+
+cp config.example.json config.json  # затем заполните api_id/api_hash/phone/usernames
 go mod tidy
 
-# из папки cmd/app
-cd cmd/app
-go run .
+go run ./cmd/app  # из корня репо
 ```
 
 Или собрать бинарь и запустить рядом с `config.json`:
@@ -237,11 +236,10 @@ go build -o sniper ./cmd/app
 ### 🇬🇧 English
 ```bash
 # Requires Go 1.25+
+cp config.example.json config.json  # then fill api_id/api_hash/phone/usernames
 go mod tidy
 
-# from cmd/app folder
-cd cmd/app
-go run .
+go run ./cmd/app  # from repo root
 ```
 
 Or build the binary and run next to `config.json`:

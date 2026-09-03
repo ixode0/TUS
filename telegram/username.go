@@ -15,11 +15,36 @@ const (
 	DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:141.0) Gecko/20100101 Firefox/141.0"
 )
 
+// Username statuses returned by CheckUsername.
+const (
+	StatusAvailable       = "Available"
+	StatusTaken           = "Taken"
+	StatusSold            = "Sold"
+	StatusAuctioned       = "Auctioned or for sale"
+	StatusRatelimit       = "Ratelimit"
+	StatusUnknown         = "Unknown"
+)
+
+// httpClient is a var so tests can stub it.
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 }
 
-// Checks if a username is available.
+// CheckUsername queries fragment.com and returns a typed status.
+// It returns an error for transport/parse failures; rate-limit is
+// reported as StatusRatelimit with nil error so callers can back off
+// instead of mistaking it for "Taken".
+func CheckUsername(ctx context.Context, username string) (string, error) {
+	status, err := getUser(ctx, username)
+	if err != nil {
+		return "", err
+	}
+	return status, nil
+}
+
+// IsUsernameAvailable reports whether a username is claimable.
+// Network errors, rate-limits and unknown states return false
+// (conservative: never claim on uncertain data).
 func IsUsernameAvailable(username string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -27,7 +52,7 @@ func IsUsernameAvailable(username string) bool {
 	if err != nil {
 		return false
 	}
-	return status == "Available"
+	return status == StatusAvailable
 }
 
 func getUser(ctx context.Context, username string) (string, error) {
@@ -66,9 +91,10 @@ func setHeaders(req *http.Request, username string) {
 
 func processResponse(resp *http.Response) (string, error) {
 	if resp.StatusCode == http.StatusTooManyRequests {
-		return "Ratelimit", nil
+		return StatusRatelimit, nil
 	}
-	body, err := io.ReadAll(resp.Body)
+	// Limit body to 1 MiB to avoid OOM on unexpected payloads.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return "", err
 	}
@@ -79,20 +105,20 @@ func processResponse(resp *http.Response) (string, error) {
 	}
 
 	if rData, ok := response["r"].(string); ok && rData == "/" {
-		return "Ratelimit", nil
+		return StatusRatelimit, nil
 	}
 	// Fragment sometimes returns 429 via JSON without status code
 
 	hData, ok := response["h"].(string)
 	if !ok || strings.TrimSpace(hData) == "" {
-		return "Available", nil
+		return StatusAvailable, nil
 	}
 
 	// More robust parsing: find status class
 	// h contains like `<span class="tm-section-header-status tm-status-taken">`
 	idx := strings.Index(hData, "tm-section-header-status")
 	if idx == -1 {
-		return "Unknown", nil
+		return StatusUnknown, nil
 	}
 	snippet := hData[idx:]
 	// extract class that starts with tm-status-
@@ -115,24 +141,24 @@ func processResponse(resp *http.Response) (string, error) {
 	}
 
 	statusMapping := map[string]string{
-		"tm-status-taken":   "Taken",
-		"tm-status-avail":   "Auctioned or for sale",
-		"tm-status-unavail": "Sold",
-		"tm-status-await":   "Taken",
+		"tm-status-taken":   StatusTaken,
+		"tm-status-avail":   StatusAuctioned,
+		"tm-status-unavail": StatusSold,
+		"tm-status-await":   StatusTaken,
 	}
 
 	if mappedStatus, exists := statusMapping[status]; exists {
 		return mappedStatus, nil
 	}
 	if strings.Contains(hData, "tm-status-taken") {
-		return "Taken", nil
+		return StatusTaken, nil
 	}
 	if strings.Contains(hData, "tm-status-avail") {
-		return "Auctioned or for sale", nil
+		return StatusAuctioned, nil
 	}
 	if strings.Contains(hData, "tm-status-unavail") {
-		return "Sold", nil
+		return StatusSold, nil
 	}
 
-	return "Unknown", nil
+	return StatusUnknown, nil
 }

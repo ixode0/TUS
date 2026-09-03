@@ -2,8 +2,10 @@ package telegram
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"time"
+
+	"github.com/ixode0/TUS/config"
 
 	"github.com/gotd/td/session"
 	"github.com/gotd/td/telegram"
@@ -19,11 +21,21 @@ type Client struct {
 	cancel context.CancelFunc
 }
 
+// authTimeout bounds the whole sign-in wait so we never deadlock forever.
+const authTimeout = 5 * time.Minute
+
 // New creates a new Telegram client, handles authentication, and runs it in a background goroutine.
-func New(appID int, appHash, phoneNumber string) *Client {
+// It returns an error instead of calling log.Fatalf, and fails fast on
+// missing/invalid credentials. Session is stored next to the config file
+// (see config.SessionPath) so the CWD doesn't silently change identity.
+func New(appID int, appHash, phoneNumber string) (*Client, error) {
+	if appID == 0 || appHash == "" || phoneNumber == "" {
+		return nil, fmt.Errorf("missing Telegram credentials: set api_id, api_hash and phone_number in config.json")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
+	sessionPath := config.SessionPath()
 	client := telegram.NewClient(appID, appHash, telegram.Options{
-		SessionStorage: &session.FileStorage{Path: "session_DO_NOT_SHARE.json"},
+		SessionStorage: &session.FileStorage{Path: sessionPath},
 	})
 
 	tgClient := &Client{
@@ -33,6 +45,7 @@ func New(appID int, appHash, phoneNumber string) *Client {
 	}
 
 	passedAuthFlow := make(chan struct{})
+	errCh := make(chan error, 1)
 	authFlow := auth.NewFlow(SimpleAuthFlow{PhoneNumber: phoneNumber}, auth.SendCodeOptions{})
 
 	go func() {
@@ -49,20 +62,34 @@ func New(appID int, appHash, phoneNumber string) *Client {
 		})
 
 		if err != nil {
-			if duration, ok := tgerr.AsFloodWait(err); ok {
-				log.Fatalf("Flood wait hit, cant signin for: %v\n", duration)
-				return
+			// Don't log.Fatalf from a goroutine — report to the caller.
+			select {
+			case errCh <- err:
+			default:
 			}
-
-			log.Fatalf("Couldnt run client: %v\n", err)
 		}
 	}()
 
-	<-passedAuthFlow
-	return tgClient
+	select {
+	case <-passedAuthFlow:
+		return tgClient, nil
+	case err := <-errCh:
+		cancel()
+		if duration, ok := tgerr.AsFloodWait(err); ok {
+			return nil, fmt.Errorf("flood wait during sign-in, retry in %v: %w", duration, err)
+		}
+		return nil, fmt.Errorf("couldn't run client: %w", err)
+	case <-time.After(authTimeout):
+		cancel()
+		return nil, fmt.Errorf("authentication timed out after %v (check phone/code/2FA input)", authTimeout)
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // CreateChannel creates a new public channel with the given username.
+// It returns an error when Telegram doesn't return a usable channel —
+// never a silent nil that would look like a successful claim.
 func (c *Client) CreateChannel(username string) error {
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
 	defer cancel()
@@ -72,30 +99,25 @@ func (c *Client) CreateChannel(username string) error {
 		return err
 	}
 
-	// Handle different Updates types safely
-	var channel *tg.Channel
-	switch upd := u.(type) {
-	case *tg.Updates:
-		if len(upd.Chats) == 0 {
-			return nil
-		}
-		if ch, ok := upd.Chats[0].(*tg.Channel); ok {
-			channel = ch
-		}
-	default:
-		// fallback: try to extract via type assertion to Updates
-		if upd, ok := u.(*tg.Updates); ok && len(upd.Chats) > 0 {
-			if ch, ok := upd.Chats[0].(*tg.Channel); ok {
-				channel = ch
-			}
-		}
+	// Handle different Updates types safely.
+	// Only *tg.Updates carries Chats; everything else is unexpected here.
+	upd, ok := u.(*tg.Updates)
+	if !ok {
+		return fmt.Errorf("unexpected response creating channel %q: %T (claim NOT confirmed)", username, u)
 	}
-	if channel == nil {
-		return nil
+	if len(upd.Chats) == 0 {
+		return fmt.Errorf("telegram returned no chats creating channel %q (claim NOT confirmed)", username)
+	}
+	ch, ok := upd.Chats[0].(*tg.Channel)
+	if !ok {
+		return fmt.Errorf("telegram returned %T instead of channel for %q (claim NOT confirmed)", upd.Chats[0], username)
+	}
+	if ch == nil {
+		return fmt.Errorf("telegram returned nil channel for %q (claim NOT confirmed)", username)
 	}
 	inputChannel := &tg.InputChannel{
-		ChannelID:  channel.GetID(),
-		AccessHash: channel.AccessHash,
+		ChannelID:  ch.GetID(),
+		AccessHash: ch.AccessHash,
 	}
 
 	// Update the channel username.

@@ -1,58 +1,59 @@
 package main
 
 import (
-	"app/config"
-	"app/telegram"
-	"app/telegram/monitor"
-	"app/telegram/sniper"
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
-)
 
-var (
-	cfg = config.GetConfig()
-	wg  sync.WaitGroup
+	"github.com/ixode0/TUS/config"
+	"github.com/ixode0/TUS/telegram"
+	"github.com/ixode0/TUS/telegram/monitor"
+	"github.com/ixode0/TUS/telegram/sniper"
 )
 
 func main() {
-	phoneNumber := cfg.Telegram.PhoneNumber
-	if !strings.HasPrefix(phoneNumber, "+") {
-		log.Fatal("Phone number must be in international format (e.g, +12848428429)")
+	if err := run(); err != nil {
+		log.Fatal(err)
 	}
+}
 
-	claimMethod := cfg.ClaimTo
-	if claimMethod != "user" && claimMethod != "channel" {
-		log.Fatal("The value of 'claim_to' must be either 'user' or 'channel'")
-	}
-
-	usernames := cfg.Usernames
-	if len(usernames) == 0 {
-		log.Fatal("Please provide at least 1 username")
-	}
+func run() error {
+	cfg := config.GetConfig()
 	if cfg.CheckSleepTimeMS < 50 {
 		log.Println("Warning: sleep_between_check < 50ms may trigger rate limits")
 	}
 
-	client := telegram.New(cfg.Telegram.APIID, cfg.Telegram.APIHash, phoneNumber)
+	client, err := telegram.New(cfg.Telegram.APIID, cfg.Telegram.APIHash, cfg.Telegram.PhoneNumber)
+	if err != nil {
+		return fmt.Errorf("telegram client: %w", err)
+	}
 	defer client.Close()
+
+	// Cancellable context for graceful shutdown.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	availableUsernamesChan := make(chan string, 10)
 
-	fmt.Printf("Monitoring %v username(s): %v (interval %dms, claim_to=%s)\n", len(usernames), usernames, cfg.CheckSleepTimeMS, claimMethod)
-	wg.Add(1)
-	go monitor.StartMonitor(usernames, cfg.CheckSleepTimeMS, availableUsernamesChan, &wg)
-	go sniper.ProcessAvailableUsernames(client, claimMethod, availableUsernamesChan)
+	fmt.Printf("Monitoring %v username(s): %v (interval %dms, claim_to=%s)\n", len(cfg.Usernames), cfg.Usernames, cfg.CheckSleepTimeMS, cfg.ClaimTo)
 
-	// Graceful shutdown on SIGINT/SIGTERM
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-	<-sigCh
-	fmt.Println("\nShutting down...")
-	close(availableUsernamesChan)
+	var wg sync.WaitGroup
+	// Monitor owns one Done; each claim loop adds its own.
+	wg.Add(1)
+	go monitor.StartMonitor(ctx, cfg.Usernames, cfg.CheckSleepTimeMS, availableUsernamesChan, &wg)
+	go sniper.ProcessAvailableUsernames(ctx, client, cfg.ClaimTo, availableUsernamesChan, &wg)
+
+	<-ctx.Done()
+	fmt.Println("\nShutting down... (waiting for in-flight claims)")
+	// Give claim loops a moment to notice ctx cancellation, then wait.
+	// Closing the channel is NOT needed: monitor exits on ctx, sniper exits
+	// on ctx or closed channel — no send-on-closed panic possible.
+	stop()
 	wg.Wait()
+	fmt.Println("Bye.")
+	return nil
 }

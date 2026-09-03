@@ -1,4 +1,4 @@
-module app
+module github.com/ixode0/TUS
 
 go 1.25.0
 
