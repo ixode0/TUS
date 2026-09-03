@@ -17,12 +17,12 @@ const (
 
 // Username statuses returned by CheckUsername.
 const (
-	StatusAvailable       = "Available"
-	StatusTaken           = "Taken"
-	StatusSold            = "Sold"
-	StatusAuctioned       = "Auctioned or for sale"
-	StatusRatelimit       = "Ratelimit"
-	StatusUnknown         = "Unknown"
+	StatusAvailable = "Available"
+	StatusTaken     = "Taken"
+	StatusSold      = "Sold"
+	StatusAuctioned = "Auctioned or for sale"
+	StatusRatelimit = "Ratelimit"
+	StatusUnknown   = "Unknown"
 )
 
 // httpClient is a var so tests can stub it.
