@@ -19,6 +19,12 @@ jobs:
             goarch: amd64
           - goos: linux
             goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -30,12 +36,15 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
-        run: go build -trimpath -ldflags="-s -w" -o sniper-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/app
+        run: |
+          EXT=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then EXT=".exe"; fi
+          go build -trimpath -ldflags="-s -w" -o "sniper-${{ matrix.goos }}-${{ matrix.goarch }}${EXT}" ./cmd/app
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: sniper-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: sniper-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: sniper-${{ matrix.goos }}-${{ matrix.goarch }}*
           if-no-files-found: error
 
   release:
@@ -61,5 +70,5 @@ jobs:
             gh release upload "$TAG" dist-artifacts/sniper-* dist-artifacts/SHA256SUMS.txt --clobber
           else
             gh release create "$TAG" dist-artifacts/sniper-* dist-artifacts/SHA256SUMS.txt \
-              --title "$TAG" --notes "TUS $TAG — binaries built by .github/workflows/release.yml (linux amd64/arm64, SHA256SUMS.txt included)."
+              --title "$TAG" --notes "TUS $TAG — binaries built by .github/workflows/release.yml (linux/darwin amd64+arm64, windows amd64, SHA256SUMS.txt included)."
           fi

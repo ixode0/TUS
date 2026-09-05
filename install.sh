@@ -97,8 +97,8 @@ log "installing TUS $VERSION for $PLAT/$ARCH"
 # --- download + verify --------------------------------------------------------
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP" "${TMP_API:-}"' EXIT
 BASE="https://github.com/$REPO/releases/download/$VERSION"
-download "$BASE/$ASSET" "$TMP/$ASSET"
-download "$BASE/SHA256SUMS.txt" "$TMP/SHA256SUMS.txt"
+download "$BASE/$ASSET" "$TMP/$ASSET" || die "download failed for $ASSET ($PLAT/$ARCH, version $VERSION). Check that the release has this asset (Actions → Release → artifacts) or build from source: git clone https://github.com/$REPO.git && cd TUS && go build -o sniper ./cmd/app"
+download "$BASE/SHA256SUMS.txt" "$TMP/SHA256SUMS.txt" || die "download failed for SHA256SUMS.txt ($VERSION). Check that the release published checksums or build from source: git clone https://github.com/$REPO.git && cd TUS && go build -o sniper ./cmd/app"
 (cd "$TMP" && grep " $ASSET\$" SHA256SUMS.txt | $SHA -c -) || die "checksum mismatch for $ASSET"
 
 mkdir -p "$INSTALL_DIR" "$TUS_CONFIG_DIR"
