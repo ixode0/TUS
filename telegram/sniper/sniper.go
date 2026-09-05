@@ -87,6 +87,11 @@ func transientBackoff(attempt int) time.Duration {
 // ProcessAvailableUsernames claims each username in its own goroutine until
 // it succeeds, hits a permanent error, or ctx is cancelled.
 // The WaitGroup may be nil; when provided it tracks in-flight claim loops.
+//
+// NOTE: the destructive user-claim confirmation happens here, in the single
+// dispatcher loop BEFORE fan-out — never inside the goroutines. Reading stdin
+// from 2+ concurrent claim loops races (lines interleave, wrong target gets
+// YES). confirmUserClaim additionally holds confirmMu as defense in depth.
 func ProcessAvailableUsernames(ctx context.Context, client *telegram.Client, claimMethod string, availableUsernamesChan <-chan string, wg *sync.WaitGroup) {
 	for {
 		select {
@@ -95,6 +100,15 @@ func ProcessAvailableUsernames(ctx context.Context, client *telegram.Client, cla
 		case username, ok := <-availableUsernamesChan:
 			if !ok {
 				return
+			}
+			// Destructive guard: claim_to=user replaces the account username.
+			// Ask once per target, synchronously; without explicit YES never claim.
+			if claimMethod == "user" {
+				current := client.CurrentUsername(ctx)
+				if !confirmUserClaim(current, username) {
+					log.Printf("[%s] %s: нет подтверждения YES — клейм в user отменён (текущий %q не тронут)", time.Now().Format(time.RFC3339), username, current)
+					continue
+				}
 			}
 			if wg != nil {
 				wg.Add(1)
@@ -113,15 +127,6 @@ func ProcessAvailableUsernames(ctx context.Context, client *telegram.Client, cla
 }
 
 func claimLoop(ctx context.Context, client *telegram.Client, claimMethod, u string) {
-	// Destructive guard: claim_to=user replaces the account username.
-	// Ask once per target; without explicit YES never claim.
-	if claimMethod == "user" {
-		current := client.CurrentUsername(ctx)
-		if !confirmUserClaim(current, u) {
-			log.Printf("[%s] %s: нет подтверждения YES — клейм в user отменён (текущий %q не тронут)", time.Now().Format(time.RFC3339), u, current)
-			return
-		}
-	}
 	maxAttempts := maxClaimAttempts()
 	maxDesc := "unlimited"
 	if maxAttempts > 0 {
@@ -221,10 +226,18 @@ func claimUsername(client *telegram.Client, claimMethod, username string) error 
 // confirmReader is a var so tests can stub stdin.
 var confirmReader = os.Stdin
 
+// confirmMu serializes stdin reads: without it 2+ concurrent claim loops
+// race on ReadString (interleaved lines, YES applied to the wrong target).
+// The primary fix is asking in the dispatcher before fan-out; the mutex is
+// defense in depth for any direct claimLoop callers.
+var confirmMu sync.Mutex
+
 // confirmUserClaim asks for explicit YES before replacing the account
 // username. current may be "" (unknown/none) — still requires YES.
 // Any input other than exactly "YES" (or EOF/err) means refusal.
 func confirmUserClaim(current, target string) bool {
+	confirmMu.Lock()
+	defer confirmMu.Unlock()
 	cur := current
 	if cur == "" {
 		cur = "(неизвестен/нет)"

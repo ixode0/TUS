@@ -17,7 +17,7 @@ TUS_CONFIG_DIR="${TUS_CONFIG_DIR:-$HOME/.config/tus}"
 VERSION="${TUS_VERSION:-latest}"
 
 API_ID="${API_ID:-}"; API_HASH="${API_HASH:-}"; PHONE="${PHONE:-}"
-USERNAMES="${USERNAMES:-}"; CLAIM_TO="${CLAIM_TO:-channel}"; SLEEP_MS="${SLEEP_MS:-100}"
+USERNAMES="${USERNAMES:-}"; CLAIM_TO="${CLAIM_TO:-}"; SLEEP_MS="${SLEEP_MS:-}"
 UNINSTALL=0
 
 log()  { printf '[tus-install] %s\n' "$*"; }
@@ -115,9 +115,16 @@ EOF
 chmod +x "$INSTALL_DIR/$WRAPPER"
 
 # --- config -------------------------------------------------------------------
-prompt() { # $1=var $2=text $3=default
+prompt() { # $1=var $2=text $3=default — always asks on a tty (Enter keeps default)
   [ -n "$(eval echo "\$$1")" ] && return 0
-  [ -n "$3" ] && eval "$1=\"$3\"" && return 0
+  if [ -n "$3" ]; then
+    if [ -t 0 ]; then
+      printf '%s [%s]: ' "$2" "$3" >&2; IFS= read -r val
+      if [ -n "$val" ]; then eval "$1=\"$val\""; else eval "$1=\"$3\""; fi
+      return 0
+    fi
+    eval "$1=\"$3\""; return 0
+  fi
   [ -t 0 ] && { printf '%s: ' "$2" >&2; IFS= read -r val; eval "$1=\"$val\""; return 0; }
   return 1
 }
@@ -134,10 +141,16 @@ if [ ! -f "$CONFIG" ]; then
       prompt API_HASH "API Hash" "" || true
       prompt PHONE "Phone (+123...)" "" || true
       prompt USERNAMES "Usernames (comma-separated, no @)" "" || true
-      prompt CLAIM_TO "Claim to [channel]" "channel" || true
-      prompt SLEEP_MS "Delay ms [100]" "100" || true
+      prompt CLAIM_TO "Claim to (channel|user)" "channel" || true
+      prompt SLEEP_MS "Delay ms" "100" || true
     fi
   fi
+  # Non-interactive fallback: prompt() already defaults these, but keep
+  # the heredoc below safe when flags/env left them empty.
+  : "${CLAIM_TO:=channel}"
+  : "${SLEEP_MS:=100}"
+  case "$CLAIM_TO" in channel|user) ;; *) log "unknown claim_to '$CLAIM_TO', using 'channel'"; CLAIM_TO="channel";; esac
+  case "$SLEEP_MS" in ''|*[!0-9]*) log "bad delay '$SLEEP_MS', using 100"; SLEEP_MS="100";; esac
   if have_values && command -v python3 >/dev/null 2>&1; then
     USERNAMES_JSON="$(printf '%s' "$USERNAMES" | tr ',' '\n' | sed 's/^ *//;s/ *$//' | grep . | sed 's/.*/"&"/' | paste -sd, -)"
     python3 - "$CONFIG" <<EOF

@@ -29,6 +29,7 @@ var (
 	loadErr    error
 	usernameRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{3,31}$`)
 	phoneRe    = regexp.MustCompile(`^\+\d{4,15}$`)
+	phoneClean = regexp.MustCompile(`[^+\d]`)
 )
 
 type Configuration struct {
@@ -76,24 +77,18 @@ func (c *Configuration) Normalize() {
 	}
 }
 
-// NormalizePhone removes spaces, dashes and parens: "+7 999-123 45-67"
-// -> "+79991234567". Leading/trailing space is trimmed first.
+// NormalizePhone removes everything except + and digits: "+7 999-123 45-67",
+// "+7.999/123(45-67)" -> "+79991234567". Leading/trailing space trimmed first.
 func NormalizePhone(s string) string {
 	s = strings.TrimSpace(s)
-	// strip inner spaces, dashes, parens
-	s = strings.ReplaceAll(s, " ", "")
-	s = strings.ReplaceAll(s, "\t", "")
-	s = strings.ReplaceAll(s, "-", "")
-	s = strings.ReplaceAll(s, "(", "")
-	s = strings.ReplaceAll(s, ")", "")
-	return s
+	return phoneClean.ReplaceAllString(s, "")
 }
 
-// NormalizeUsername strips surrounding spaces and leading @, lowercases:
-// " @Durov " -> "durov". Telegram usernames are case-insensitive.
+// NormalizeUsername strips surrounding spaces and ALL leading @, lowercases:
+// " @@Durov " -> "durov". Telegram usernames are case-insensitive.
 func NormalizeUsername(s string) string {
 	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "@")
+	s = strings.TrimLeft(s, "@")
 	s = strings.TrimSpace(s)
 	return strings.ToLower(s)
 }
@@ -125,12 +120,15 @@ func (c *Configuration) Validate() error {
 		return fmt.Errorf("usernames пуст: добавь хотя бы 1 юзернейм без @, например [\"durov\"]")
 	}
 	for _, u := range c.Usernames {
+		if u == "your_username" {
+			return fmt.Errorf("юзернейм %q: убери your_username — впиши реальный юзернейм без @, например [\"durov\"]", u)
+		}
 		if !usernameRe.MatchString(u) {
 			return fmt.Errorf("юзернейм %q: 4-32 символа без @, буквы/цифры/_, начинается с буквы (убери @ в начале, например @durov → durov)", u)
 		}
 	}
 	if c.CheckSleepTimeMS < 0 {
-		return fmt.Errorf("sleep_between_check %d: должен быть >= 0 мс (0 = по умолчанию %d мс; меньше %d мс — риск FloodWait)", c.CheckSleepTimeMS, DefaultSleepMS, MinSafeSleepMS)
+		return fmt.Errorf("sleep_between_check %d: должен быть >= 0 мс (меньше %d мс — риск FloodWait, рекомендую %d мс)", c.CheckSleepTimeMS, MinSafeSleepMS, DefaultSleepMS)
 	}
 	return nil
 }
@@ -142,11 +140,11 @@ func startupHelp(triedPath string) string {
 	xdg := filepath.Join(home, ".config", "tus", "config.json")
 	return fmt.Sprintf(`=== TUS: нет конфига — с чего начать ===
 1. Конфиг ищется тут (первый найденный побеждает):
-   - рядом с запуском: ./config.json
-   - рядом с бинарём:  <папка_бинаря>/config.json
-   - общий путь:       %s
-   - свой путь:        CONFIG_PATH=/path/to/config.json ./sniper
-   Пробовал: %s
+    - общий путь:       %s
+    - рядом с запуском: ./config.json
+    - рядом с бинарём:  <папка_бинаря>/config.json
+    - свой путь:        CONFIG_PATH=/path/to/config.json ./sniper
+    Пробовал: %s
 2. Создай: cp config.example.json config.json (или положи в ~/.config/tus/config.json)
 3. api_id и api_hash возьми на https://my.telegram.org → API development tools
    (залогинься номером телефона, создай app, впиши id+hash в config.json).
