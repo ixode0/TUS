@@ -7,6 +7,7 @@
    Телефон пиши с + (например +1234567890), юзернеймы без @ (например dead,devious).
 4. Запуск: tus; при первом запуске введи код из Telegram. Если включена 2FA — на запрос
    Enter your password: введи пароль (ввод скрыт).
+   Windows: бинарь sniper.exe, конфиг %LOCALAPPDATA%\TUS\config.json (ставит install.ps1); запуск: sniper.exe.
 
 === Вариант Б — запуск из исходников (конфиг рядом с кодом/бинарём) ===
 5. Из исходников: cp config.example.json config.json и заполни api_id/api_hash/phone/usernames —
