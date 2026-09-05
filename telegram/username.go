@@ -28,9 +28,20 @@ const (
 
 // httpClient is a var so tests can stub it.
 // Default transport honors HTTP_PROXY/HTTPS_PROXY (incl. socks5://) from env.
+// Clone of DefaultTransport keeps sane defaults (timeouts, keep-alives,
+// TLS handshake, connection pooling) instead of zero-valued Transport.
 var httpClient = &http.Client{
 	Timeout:   10 * time.Second,
-	Transport: &http.Transport{Proxy: http.ProxyFromEnvironment},
+	Transport: defaultTransportWithProxy(),
+}
+
+func defaultTransportWithProxy() http.RoundTripper {
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		clone := t.Clone()
+		clone.Proxy = http.ProxyFromEnvironment
+		return clone
+	}
+	return &http.Transport{Proxy: http.ProxyFromEnvironment}
 }
 
 // CheckUsername queries fragment.com and returns a typed status.

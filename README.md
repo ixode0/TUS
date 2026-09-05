@@ -53,6 +53,11 @@ tus
 
 Ручная установка из исходников / Manual build: см. [Running](#-запуск--running).
 
+> 🇷🇺 `install.sh` качает бинарь из **GitHub Releases** (ассеты `sniper-linux-amd64/arm64` + `SHA256SUMS.txt` собирает `.github/workflows/release.yml` по тегу `v*`).
+> После push проверь: **Actions → CI зелёный → (для релиза: поставь тег `vX.Y.Z`) → Releases → скачай бинарь**.
+> 🇬🇧 `install.sh` fetches the binary from **GitHub Releases** (assets `sniper-linux-amd64/arm64` + `SHA256SUMS.txt`, built by `.github/workflows/release.yml` on tag `v*`).
+> After pushing, verify: **Actions → CI green → (for a release: tag `vX.Y.Z`) → Releases → download the binary**.
+
 ---
 
 ## 🤖 Промт для ИИ / AI Prompt
@@ -191,7 +196,7 @@ This prompt is especially handy if the user has no Go environment — the AI wil
 **A:** 🇷🇺 Монитор проверяет до 5 юзернеймов параллельно, пауза одна на раунд (`sleep_between_check`). 🇬🇧 Monitor checks up to 5 usernames in parallel, one sleep per round.
 
 **Q: Где канонический путь репозитория? / What is the canonical path?**
-**A:** 🇷🇺 `/tmp/opencode/TUS` — временная рабочая копия; перенесите в свой каталог (напр. `~/TUS` или `/opt/tus`) и работайте там. `/root/telegram-username-sniper-updated` — stale-копия, не использовать. 🇬🇧 `/tmp/opencode/TUS` is a temp copy — move it to `~/TUS` or `/opt/tus`; `/root/telegram-username-sniper-updated` is stale, do not use.
+**A:** 🇷🇺 Каноника — https://github.com/ixode0/TUS, рабочая копия — `~/TUS`. `/root/telegram-username-sniper-updated` — stale-копия, не использовать. 🇬🇧 Canonical — https://github.com/ixode0/TUS, working copy — `~/TUS`; `/root/telegram-username-sniper-updated` is stale, do not use.
 
 ---
 

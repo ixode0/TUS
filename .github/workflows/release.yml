@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+          cache: true
+      - name: Build sniper-${{ matrix.goos }}-${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: go build -trimpath -ldflags="-s -w" -o sniper-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/app
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sniper-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: sniper-${{ matrix.goos }}-${{ matrix.goarch }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: dist-artifacts
+          merge-multiple: true
+      - name: Generate SHA256SUMS.txt
+        run: |
+          cd dist-artifacts
+          sha256sum sniper-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ -z "$TAG" ]; then TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo nightly)"; fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist-artifacts/sniper-* dist-artifacts/SHA256SUMS.txt --clobber
+          else
+            gh release create "$TAG" dist-artifacts/sniper-* dist-artifacts/SHA256SUMS.txt \
+              --title "$TAG" --notes "TUS $TAG — binaries built by .github/workflows/release.yml (linux amd64/arm64, SHA256SUMS.txt included)."
+          fi

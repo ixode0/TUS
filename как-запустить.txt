@@ -1,0 +1,7 @@
+1. Новичок (без Go): поставь готовый бинарь из GitHub Releases (install.sh сам скачает sniper + проверит SHA256SUMS) — конфиг будет в ~/.config/tus/config.json (пути CONFIG_PATH/SESSION_PATH задаёт лаунчер tus).
+2. API ID и API Hash возьми на https://my.telegram.org → API development tools.
+3. Из исходников: cp config.example.json config.json и заполни api_id/api_hash/phone/usernames — тут config.json лежит рядом с кодом/бинарём.
+4. Телефон пиши с + (например +1234567890), юзернеймы без @ (например dead,devious).
+5. Запуск: tus (вариант из релиза) или go run ./cmd/app / ./sniper (вариант из исходников); при первом запуске введи код из Telegram.
+6. Если включена 2FA — на запрос Enter your password: введи пароль (ввод скрыт).
+7. Успех — строка Successfully claimed: <username>; файл session_DO_NOT_SHARE.json никому не показывай и не коммить.
