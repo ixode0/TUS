@@ -174,6 +174,24 @@ func (c *Client) CreateChannel(username string, precheck ...bool) error {
 	return nil
 }
 
+// CurrentUsername returns the account's current username ("" when none).
+// Best effort: used only for the destructive claim_to=user confirmation.
+func (c *Client) CurrentUsername(ctx context.Context) string {
+	if c == nil || c.api == nil {
+		return ""
+	}
+	pctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	users, err := c.api.UsersGetUsers(pctx, []tg.InputUserClass{&tg.InputUserSelf{}})
+	if err != nil || len(users) == 0 {
+		return ""
+	}
+	if u, ok := users[0].(*tg.User); ok && u != nil {
+		return u.Username
+	}
+	return ""
+}
+
 // UpdateUsername updates the account username.
 func (c *Client) UpdateUsername(newUsername string) error {
 	if c == nil || c.api == nil {

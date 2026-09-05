@@ -34,7 +34,7 @@ func (s SimpleAuthFlow) Phone(context.Context) (string, error) {
 }
 
 func (s SimpleAuthFlow) Password(context.Context) (string, error) {
-	password, err := scanLnWithoutEcho("Enter your password: ")
+	password, err := scanLnWithoutEcho("Пароль 2FA (ввод скрыт, набери и Enter): ")
 	if err != nil {
 		return "", err
 	}
@@ -43,7 +43,7 @@ func (s SimpleAuthFlow) Password(context.Context) (string, error) {
 }
 
 func (s SimpleAuthFlow) Code(context.Context, *tg.AuthSentCode) (string, error) {
-	code, err := scanLnWithoutEcho("Enter the code you received to your telegram account: ")
+	code, err := scanLnWithoutEcho("Код пришел в чат Telegram (не СМС). Ввод скрыт, вставь и Enter: ")
 	if err != nil {
 		return "", err
 	}

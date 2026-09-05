@@ -23,8 +23,9 @@ func main() {
 
 func run() error {
 	cfg := config.GetConfig()
-	if cfg.CheckSleepTimeMS < 50 {
-		log.Println("Warning: sleep_between_check < 50ms may trigger rate limits")
+	if cfg.CheckSleepTimeMS < config.MinSafeSleepMS {
+		log.Printf("Warning: sleep_between_check=%dms < %dms may trigger rate limits (FloodWait); recommended %dms",
+			cfg.CheckSleepTimeMS, config.MinSafeSleepMS, config.DefaultSleepMS)
 	}
 
 	client, err := telegram.New(cfg.Telegram.APIID, cfg.Telegram.APIHash, cfg.Telegram.PhoneNumber)

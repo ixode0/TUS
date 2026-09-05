@@ -13,6 +13,10 @@ import (
 // scans lose the race on 10+ names; unbounded parallelism hammers fragment.
 const maxConcurrentChecks = 5
 
+// heartbeatInterval: how often to log waiting progress so the user sees
+// the monitor is alive ("проверяю... рейт-лимитов нет").
+const heartbeatInterval = 30 * time.Second
+
 type checkResult struct {
 	index    int
 	username string
@@ -35,6 +39,7 @@ func StartMonitor(ctx context.Context, usernames []string, sleepTimeMs int, avai
 
 	backoff := time.Duration(sleepTimeMs) * time.Millisecond
 	const maxBackoff = 30 * time.Second
+	lastHeartbeat := time.Now()
 
 	for len(pending) > 0 {
 		select {
@@ -99,6 +104,11 @@ func StartMonitor(ctx context.Context, usernames []string, sleepTimeMs int, avai
 		} else {
 			if !sleepCtx(ctx, time.Duration(sleepTimeMs)*time.Millisecond) {
 				return
+			}
+			// Waiting progress: prove we're alive when all is quiet.
+			if time.Since(lastHeartbeat) >= heartbeatInterval {
+				log.Printf("monitor: проверяю %v... рейт-лимитов нет", pending)
+				lastHeartbeat = time.Now()
 			}
 		}
 	}

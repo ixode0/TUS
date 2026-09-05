@@ -1,12 +1,14 @@
 package sniper
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -46,6 +48,11 @@ func isPermanent(err error) bool {
 // NOTE: the cap below applies ONLY to transient backoff. FloodWait always
 // waits the full server-sent duration + jitter — capping it re-hits the
 // limit on the exact second and escalates to a ban.
+//
+// CLAIM_MAX_ATTEMPTS (env): safe default 0 = unlimited — never silently drop
+// a snipe; the loop stops only on permanent error or ctx cancel.
+// Set CLAIM_MAX_ATTEMPTS=200 (or N) to bound a claim loop explicitly.
+// Invalid values fall back to 0 with a warning.
 const (
 	baseRetryBackoff = 1500 * time.Millisecond
 	maxRetryBackoff  = 30 * time.Second
@@ -106,6 +113,15 @@ func ProcessAvailableUsernames(ctx context.Context, client *telegram.Client, cla
 }
 
 func claimLoop(ctx context.Context, client *telegram.Client, claimMethod, u string) {
+	// Destructive guard: claim_to=user replaces the account username.
+	// Ask once per target; without explicit YES never claim.
+	if claimMethod == "user" {
+		current := client.CurrentUsername(ctx)
+		if !confirmUserClaim(current, u) {
+			log.Printf("[%s] %s: нет подтверждения YES — клейм в user отменён (текущий %q не тронут)", time.Now().Format(time.RFC3339), u, current)
+			return
+		}
+	}
 	maxAttempts := maxClaimAttempts()
 	maxDesc := "unlimited"
 	if maxAttempts > 0 {
@@ -200,6 +216,26 @@ func claimUsername(client *telegram.Client, claimMethod, username string) error 
 	default:
 		return fmt.Errorf("unknown claim method: %s", claimMethod)
 	}
+}
+
+// confirmReader is a var so tests can stub stdin.
+var confirmReader = os.Stdin
+
+// confirmUserClaim asks for explicit YES before replacing the account
+// username. current may be "" (unknown/none) — still requires YES.
+// Any input other than exactly "YES" (or EOF/err) means refusal.
+func confirmUserClaim(current, target string) bool {
+	cur := current
+	if cur == "" {
+		cur = "(неизвестен/нет)"
+	}
+	fmt.Printf("ВНИМАНИЕ: claim_to=user! Текущий юзернейм %s будет заменен на %s, его заберут чужие. Напечатай YES чтобы продолжить: ", cur, target)
+	line, err := bufio.NewReader(confirmReader).ReadString('\n')
+	if err != nil {
+		fmt.Println()
+		return false
+	}
+	return strings.TrimSpace(line) == "YES"
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) bool {

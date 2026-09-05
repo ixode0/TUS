@@ -224,9 +224,10 @@ This prompt is especially handy if the user has no Go environment — the AI wil
 |------|----------|
 | `telegram.phone_number` | Номер аккаунта в международном формате (`+1234567890`) |
 | `telegram.api_id` / `telegram.api_hash` | Получить на https://my.telegram.org → *API development tools* |
-| `claim_to` | Способ клейма: `channel` или `user` |
-| `sleep_between_check` | Пауза между проверками, мс. Менее `100` может вызвать рейт-лимиты |
-| `usernames` | Список юзернеймов для мониторинга (например `["dead", "devious"]`) |
+| `claim_to` | Способ клейма: `channel` или `user` (регистр не важен, `Channel` → `channel`). `user` — деструктивно: заменяет юзернейм аккаунта, перед клеймом спросит `YES` |
+| `sleep_between_check` | Пауза между проверками, мс. Дефолт `100` (пусто/0 → 100). Менее `50` может вызвать рейт-лимиты (FloodWait) |
+| `usernames` | Список юзернеймов для мониторинга без `@` (например `["dead", "devious"]`; `@dead` тоже примут — `@` срежется, регистр → нижний) |
+| `CLAIM_MAX_ATTEMPTS` (env) | Лимит попыток клейма на юзернейм. Дефолт `0` = бесконечно (остановка только по успеху/постоянной ошибке/выходу). Пример: `CLAIM_MAX_ATTEMPTS=200 ./sniper` |
 
 ### 🇬🇧 English
 Copy `config.example.json` to `config.json` and fill it (`config.json` is git-ignored — secrets are never committed):
@@ -248,11 +249,12 @@ Copy `config.example.json` to `config.json` and fill it (`config.json` is git-ig
 
 | Field | Description |
 |-------|-------------|
-| `telegram.phone_number` | Account phone in international format (`+1234567890`) |
+| `telegram.phone_number` | Account phone in international format (`+1234567890`; spaces/dashes are stripped, leading `8` → use `+7` instead) |
 | `telegram.api_id` / `telegram.api_hash` | Get at https://my.telegram.org → *API development tools* |
-| `claim_to` | Claim method: `channel` or `user` |
-| `sleep_between_check` | Delay between checks, ms. Below `100` may trigger rate limits |
-| `usernames` | List of usernames to watch (e.g. `["dead", "devious"]`) |
+| `claim_to` | Claim method: `channel` or `user` (case-insensitive). `user` is destructive: replaces the account username, asks for `YES` first |
+| `sleep_between_check` | Delay between checks, ms. Default `100` (missing/0 → 100). Below `50` may trigger rate limits |
+| `usernames` | List of usernames to watch without `@` (e.g. `["dead", "devious"]`; leading `@` is stripped, lowercased) |
+| `CLAIM_MAX_ATTEMPTS` (env) | Max claim attempts per username. Default `0` = unlimited (stops only on success/permanent error/shutdown). E.g. `CLAIM_MAX_ATTEMPTS=200 ./sniper` |
 
 ---
 
@@ -273,7 +275,7 @@ go build -o sniper ./cmd/app
 ./sniper
 ```
 
-При первом запуске будет запрошен код авторизации из Telegram — он придёт в приложение аккаунта. Если включена 2FA — далее запросит пароль (`Enter your password:`). После этого сессия сохранится в `session_DO_NOT_SHARE.json` (не делитесь и не коммитьте этот файл).
+При первом запуске будет запрошен код авторизации из Telegram — он придёт в чат приложения (не СМС, ввод скрыт: вставь и Enter). Если включена 2FA — далее запросит пароль 2FA (ввод тоже скрыт). После этого сессия сохранится в `session_DO_NOT_SHARE.json` (не делитесь и не коммитьте этот файл).
 
 > Не-интерактивный запуск: код можно подложить в `TG_CODE` (env) или файл `/tmp/tg_code.txt` (удалится после чтения). Пароль 2FA при необходимости — через stdin (скрытый ввод).
 
@@ -292,7 +294,7 @@ go build -o sniper ./cmd/app
 ./sniper
 ```
 
-On first launch you'll be asked for the Telegram auth code — it will arrive in your account's app. If 2FA is enabled — it will then ask for password (`Enter your password:`). Afterwards the session is saved to `session_DO_NOT_SHARE.json` (do not share or commit this file).
+On first launch you'll be asked for the Telegram auth code — it arrives in the app chat (not SMS, hidden input: paste + Enter). If 2FA is enabled — it will then ask for the 2FA password (also hidden). Afterwards the session is saved to `session_DO_NOT_SHARE.json` (do not share or commit this file).
 
 > Non-interactive run: you can provide the code via `TG_CODE` env or `/tmp/tg_code.txt` file (deleted after reading). 2FA password if needed — via stdin (hidden input).
 
