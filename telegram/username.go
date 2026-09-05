@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -26,8 +27,10 @@ const (
 )
 
 // httpClient is a var so tests can stub it.
+// Default transport honors HTTP_PROXY/HTTPS_PROXY (incl. socks5://) from env.
 var httpClient = &http.Client{
-	Timeout: 10 * time.Second,
+	Timeout:   10 * time.Second,
+	Transport: &http.Transport{Proxy: http.ProxyFromEnvironment},
 }
 
 // CheckUsername queries fragment.com and returns a typed status.
@@ -56,7 +59,7 @@ func IsUsernameAvailable(username string) bool {
 }
 
 func getUser(ctx context.Context, username string) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", FragmentBaseURL+"username/"+username, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", FragmentBaseURL+"username/"+url.PathEscape(username), nil)
 	if err != nil {
 		return "", err
 	}
@@ -72,7 +75,7 @@ func getUser(ctx context.Context, username string) (string, error) {
 }
 
 func setHeaders(req *http.Request, username string) {
-	referURL := fmt.Sprintf("%s?query=%s", FragmentBaseURL, username)
+	referURL := fmt.Sprintf("%s?query=%s", FragmentBaseURL, url.QueryEscape(username))
 
 	req.Header.Set("User-Agent", DefaultUserAgent)
 	req.Header.Set("X-Aj-Referer", referURL)
@@ -111,7 +114,9 @@ func processResponse(resp *http.Response) (string, error) {
 
 	hData, ok := response["h"].(string)
 	if !ok || strings.TrimSpace(hData) == "" {
-		return StatusAvailable, nil
+		// Conservative: empty/missing payload means "unknown", never
+		// "available" — claiming on it burns FloodWait quota (B1).
+		return StatusUnknown, nil
 	}
 
 	// More robust parsing: find status class
@@ -144,20 +149,13 @@ func processResponse(resp *http.Response) (string, error) {
 		"tm-status-taken":   StatusTaken,
 		"tm-status-avail":   StatusAuctioned,
 		"tm-status-unavail": StatusSold,
-		"tm-status-await":   StatusTaken,
+		// tm-status-await is a transient/check state, NOT a confirmed
+		// Taken — mapping it to Taken drops names that might be free.
+		"tm-status-await": StatusUnknown,
 	}
 
 	if mappedStatus, exists := statusMapping[status]; exists {
 		return mappedStatus, nil
-	}
-	if strings.Contains(hData, "tm-status-taken") {
-		return StatusTaken, nil
-	}
-	if strings.Contains(hData, "tm-status-avail") {
-		return StatusAuctioned, nil
-	}
-	if strings.Contains(hData, "tm-status-unavail") {
-		return StatusSold, nil
 	}
 
 	return StatusUnknown, nil

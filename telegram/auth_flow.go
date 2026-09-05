@@ -73,13 +73,24 @@ func scanLnWithoutEcho(s string) (string, error) {
 	}
 	// allow feeding via file for bot forwarding (consumed after reading).
 	if data, err := os.ReadFile(codeFilePath); err == nil {
-		if st, statErr := os.Stat(codeFilePath); statErr == nil {
-			if perm := st.Mode().Perm(); perm&0o077 != 0 {
-				fmt.Fprintf(os.Stderr, "warning: %s is world/group-readable (mode %04o); use chmod 600 %s\n", codeFilePath, perm, codeFilePath)
+		if st, statErr := os.Lstat(codeFilePath); statErr == nil {
+			if st.Mode()&os.ModeSymlink != 0 {
+				fmt.Fprintf(os.Stderr, "warning: %s is a symlink, refusing to read code file (symlink attack risk)\n", codeFilePath)
+			} else {
+				if perm := st.Mode().Perm(); perm&0o077 != 0 {
+					fmt.Fprintf(os.Stderr, "warning: %s is world/group-readable (mode %04o); hardening to 0600\n", codeFilePath, perm)
+					if chErr := os.Chmod(codeFilePath, 0o600); chErr != nil {
+						fmt.Fprintf(os.Stderr, "warning: chmod 600 %s failed: %v\n", codeFilePath, chErr)
+					}
+				}
+				if c := strings.TrimSpace(string(data)); c != "" {
+					// consume it
+					_ = os.Remove(codeFilePath)
+					fmt.Println("[using code file]")
+					return c, nil
+				}
 			}
-		}
-		if c := strings.TrimSpace(string(data)); c != "" {
-			// consume it
+		} else if c := strings.TrimSpace(string(data)); c != "" {
 			_ = os.Remove(codeFilePath)
 			fmt.Println("[using code file]")
 			return c, nil

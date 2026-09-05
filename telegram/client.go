@@ -3,6 +3,8 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"github.com/ixode0/TUS/config"
@@ -34,6 +36,14 @@ func New(appID int, appHash, phoneNumber string) (*Client, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	sessionPath := config.SessionPath()
+	// Harden existing session file: it holds auth keys, must not be group/world-readable.
+	if st, err := os.Stat(sessionPath); err == nil {
+		if perm := st.Mode().Perm(); perm&0o077 != 0 {
+			if err := os.Chmod(sessionPath, 0o600); err != nil {
+				log.Printf("warning: session file %s has mode %04o and chmod 600 failed: %v", sessionPath, perm, err)
+			}
+		}
+	}
 	client := telegram.NewClient(appID, appHash, telegram.Options{
 		SessionStorage: &session.FileStorage{Path: sessionPath},
 	})
@@ -87,12 +97,40 @@ func New(appID int, appHash, phoneNumber string) (*Client, error) {
 	}
 }
 
+// CheckUsernameMTProto revalidates availability via MTProto right before a
+// claim (fragment data may be stale). Returns true when Telegram reports the
+// name as acceptable/claimable.
+func (c *Client) CheckUsernameMTProto(ctx context.Context, username string) (bool, error) {
+	if c == nil || c.api == nil {
+		return false, fmt.Errorf("telegram client not ready (nil api) checking %q", username)
+	}
+	ok, err := c.api.AccountCheckUsername(ctx, username)
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
+}
+
 // CreateChannel creates a new public channel with the given username.
 // It returns an error when Telegram doesn't return a usable channel —
 // never a silent nil that would look like a successful claim.
-func (c *Client) CreateChannel(username string) error {
+// The MTProto pre-check lives in the sniper claimLoop; here it is opt-in
+// via precheck=true to avoid a double check on every claim attempt.
+func (c *Client) CreateChannel(username string, precheck ...bool) error {
+	if c == nil || c.api == nil {
+		return fmt.Errorf("telegram client not ready (nil api) creating channel %q", username)
+	}
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
 	defer cancel()
+
+	if len(precheck) > 0 && precheck[0] {
+		if ok, err := c.CheckUsernameMTProto(ctx, username); err != nil || !ok {
+			if err != nil {
+				return fmt.Errorf("pre-claim MTProto check for %q failed: %w (claim aborted)", username, err)
+			}
+			return fmt.Errorf("pre-claim MTProto check for %q: not available (claim aborted)", username)
+		}
+	}
 
 	u, err := c.api.ChannelsCreateChannel(ctx, &tg.ChannelsCreateChannelRequest{Title: username, Broadcast: true})
 	if err != nil {
@@ -125,7 +163,12 @@ func (c *Client) CreateChannel(username string) error {
 		Channel:  inputChannel,
 		Username: username,
 	}); err != nil {
-		return err
+		// Cleanup: don't leave an orphan empty public channel behind
+		// (accelerates CHANNELS_TOO_MUCH). Best effort, original error wins.
+		if _, delErr := c.api.ChannelsDeleteChannel(ctx, inputChannel); delErr != nil {
+			return fmt.Errorf("claim %q failed: %w (orphan cleanup also failed: %v)", username, err, delErr)
+		}
+		return fmt.Errorf("claim %q failed: %w (orphan channel deleted)", username, err)
 	}
 
 	return nil
@@ -133,8 +176,20 @@ func (c *Client) CreateChannel(username string) error {
 
 // UpdateUsername updates the account username.
 func (c *Client) UpdateUsername(newUsername string) error {
+	if c == nil || c.api == nil {
+		return fmt.Errorf("telegram client not ready (nil api) updating to %q", newUsername)
+	}
 	ctx, cancel := context.WithTimeout(c.ctx, 15*time.Second)
 	defer cancel()
+	// Backup: stash current username in logs so it can be restored manually.
+	// Best effort — never blocks the claim on a failed lookup.
+	if users, err := c.api.UsersGetUsers(ctx, []tg.InputUserClass{&tg.InputUserSelf{}}); err == nil && len(users) > 0 {
+		if u, ok := users[0].(*tg.User); ok {
+			log.Printf("UpdateUsername: current account username %q -> claiming %q", u.Username, newUsername)
+		}
+	} else if err != nil {
+		log.Printf("UpdateUsername: could not read current username (continuing): %v", err)
+	}
 	_, err := c.api.AccountUpdateUsername(ctx, newUsername)
 	return err
 }

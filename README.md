@@ -181,6 +181,18 @@ This prompt is especially handy if the user has no Go environment — the AI wil
 1. Online Telegram username marketplaces.
 2. Inactive accounts ("last seen a long time ago") — such accounts may be deleted in the next 1-12 months.
 
+**Q: Пустой ответ fragment — это Available? / Is an empty fragment response Available?**
+**A:** 🇷🇺 Нет — пустой `h` = `Unknown` (не `Available`), клейм не запускается, мониторинг продолжает ждать. 🇬🇧 No — empty `h` = `Unknown`, no claim is started.
+
+**Q: Как использовать прокси? / How to use a proxy?**
+**A:** 🇷🇺 Отдельного поля нет — fragment идёт через env: `export HTTPS_PROXY=http://127.0.0.1:8080` или `export HTTPS_PROXY=socks5://127.0.0.1:1080` (поддержаны `HTTP_PROXY/HTTPS_PROXY`, в т.ч. `socks5://`). 🇬🇧 No dedicated field — set `HTTPS_PROXY`/`HTTP_PROXY` env (incl. `socks5://`), e.g. `HTTPS_PROXY=socks5://127.0.0.1:1080 ./sniper`.
+
+**Q: Сколько потоков проверки? / How many check threads?**
+**A:** 🇷🇺 Монитор проверяет до 5 юзернеймов параллельно, пауза одна на раунд (`sleep_between_check`). 🇬🇧 Monitor checks up to 5 usernames in parallel, one sleep per round.
+
+**Q: Где канонический путь репозитория? / What is the canonical path?**
+**A:** 🇷🇺 `/tmp/opencode/TUS` — временная рабочая копия; перенесите в свой каталог (напр. `~/TUS` или `/opt/tus`) и работайте там. `/root/telegram-username-sniper-updated` — stale-копия, не использовать. 🇬🇧 `/tmp/opencode/TUS` is a temp copy — move it to `~/TUS` or `/opt/tus`; `/root/telegram-username-sniper-updated` is stale, do not use.
+
 ---
 
 ## 🔧 Конфигурация / Configuration

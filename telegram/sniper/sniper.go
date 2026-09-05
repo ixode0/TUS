@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -38,6 +40,43 @@ func isPermanent(err error) bool {
 	return false
 }
 
+// Bounds for the transient retry loop (B3): previously every transient error
+// retried forever every 1.5s, burning quota. Now exponential backoff with a
+// cap, plus a max-attempts circuit breaker (0 = unlimited).
+// NOTE: the cap below applies ONLY to transient backoff. FloodWait always
+// waits the full server-sent duration + jitter — capping it re-hits the
+// limit on the exact second and escalates to a ban.
+const (
+	baseRetryBackoff = 1500 * time.Millisecond
+	maxRetryBackoff  = 30 * time.Second
+)
+
+func maxClaimAttempts() int {
+	if v := os.Getenv("CLAIM_MAX_ATTEMPTS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			return n
+		}
+		log.Printf("warning: invalid CLAIM_MAX_ATTEMPTS=%q, using default 0 (unlimited)", v)
+	}
+	// Default 0 = unlimited: silently dropping a snipe after 200 attempts
+	// is worse than retrying until ctx cancels. Set CLAIM_MAX_ATTEMPTS to
+	// bound a claim loop explicitly.
+	return 0
+}
+
+// transientBackoff grows 1.5s -> 3s -> 6s ... every 10 attempts, capped.
+func transientBackoff(attempt int) time.Duration {
+	shift := (attempt - 1) / 10
+	if shift > 4 {
+		shift = 4
+	}
+	d := baseRetryBackoff << shift
+	if d > maxRetryBackoff {
+		d = maxRetryBackoff
+	}
+	return d
+}
+
 // ProcessAvailableUsernames claims each username in its own goroutine until
 // it succeeds, hits a permanent error, or ctx is cancelled.
 // The WaitGroup may be nil; when provided it tracks in-flight claim loops.
@@ -67,7 +106,12 @@ func ProcessAvailableUsernames(ctx context.Context, client *telegram.Client, cla
 }
 
 func claimLoop(ctx context.Context, client *telegram.Client, claimMethod, u string) {
-	fmt.Printf("[%s] Found available username: %s -> start claiming every 1.5s\n", time.Now().Format(time.RFC3339), u)
+	maxAttempts := maxClaimAttempts()
+	maxDesc := "unlimited"
+	if maxAttempts > 0 {
+		maxDesc = strconv.Itoa(maxAttempts)
+	}
+	fmt.Printf("[%s] Found available username: %s -> start claiming (max %s attempts)\n", time.Now().Format(time.RFC3339), u, maxDesc)
 	attempt := 0
 	for {
 		select {
@@ -77,7 +121,41 @@ func claimLoop(ctx context.Context, client *telegram.Client, claimMethod, u stri
 		default:
 		}
 
+		if maxAttempts > 0 && attempt >= maxAttempts {
+			log.Printf("[%s] sniper expired for %s: max attempts (%d) reached -> stop retrying", time.Now().Format(time.RFC3339), u, maxAttempts)
+			return
+		}
 		attempt++
+		// Pre-check via MTProto before each claim attempt: fragment signal
+		// may be stale and blind retries burn FloodWait quota (B2).
+		stop := false
+		func() {
+			pctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			defer cancel()
+			ok, err := client.CheckUsernameMTProto(pctx, u)
+			if ctx.Err() != nil {
+				stop = true
+				return
+			}
+			if err != nil {
+				if isPermanent(err) {
+					log.Printf("[%s] %s pre-check not claimable (attempt %d): %v -> stop retrying", time.Now().Format(time.RFC3339), u, attempt, err)
+					stop = true
+					return
+				}
+				// Transient pre-check error: fall through to claim attempt
+				// with bounded backoff below.
+				log.Printf("[%s] %s pre-check transient error (attempt %d): %v", time.Now().Format(time.RFC3339), u, attempt, err)
+				return
+			}
+			if !ok {
+				log.Printf("[%s] %s pre-check: no longer available -> stop retrying", time.Now().Format(time.RFC3339), u)
+				stop = true
+			}
+		}()
+		if stop {
+			return
+		}
 		err := claimUsername(client, claimMethod, u)
 		if err == nil {
 			fmt.Printf("[%s] Successfully claimed: %s via %s (attempt %d)\n", time.Now().Format(time.RFC3339), u, claimMethod, attempt)
@@ -89,8 +167,9 @@ func claimLoop(ctx context.Context, client *telegram.Client, claimMethod, u stri
 			return
 		}
 		if d, ok := tgerr.AsFloodWait(err); ok {
-			// Add 1-3s jitter on top of the required wait to avoid
-			// re-hitting FloodWait on the exact second.
+			// Always wait the FULL server-sent duration + 1-3s jitter.
+			// Capping FloodWait re-hits the limit early and escalates
+			// the ban; the cap applies only to transient backoff below.
 			jitter := time.Duration(1000+rand.Intn(2000)) * time.Millisecond
 			wait := d + jitter
 			log.Printf("[%s] FloodWait for %s: %v (attempt %d): %v -> waiting %v", time.Now().Format(time.RFC3339), u, d, attempt, err, wait)
@@ -104,8 +183,9 @@ func claimLoop(ctx context.Context, client *telegram.Client, claimMethod, u stri
 			log.Printf("[%s] unknown claim method %q for %s: %v -> stop retrying", time.Now().Format(time.RFC3339), claimMethod, u, err)
 			return
 		}
-		log.Printf("[%s] Failed to claim %s (attempt %d): %v -> retry in 1.5s", time.Now().Format(time.RFC3339), u, attempt, err)
-		if !sleepCtx(ctx, 1500*time.Millisecond) {
+		backoff := transientBackoff(attempt)
+		log.Printf("[%s] Failed to claim %s (attempt %d/%s): %v -> retry in %v", time.Now().Format(time.RFC3339), u, attempt, maxDesc, err, backoff)
+		if !sleepCtx(ctx, backoff) {
 			return
 		}
 	}

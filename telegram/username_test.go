@@ -25,11 +25,12 @@ func TestProcessResponse(t *testing.T) {
 	}{
 		{"ratelimit status", 429, `{}`, StatusRatelimit},
 		{"ratelimit json r", 200, `{"r":"/"}`, StatusRatelimit},
-		{"empty h = available", 200, `{"h":""}`, StatusAvailable},
-		{"missing h = available", 200, `{}`, StatusAvailable},
+		{"empty h = unknown (conservative, B1)", 200, `{"h":""}`, StatusUnknown},
+		{"missing h = unknown (conservative, B1)", 200, `{}`, StatusUnknown},
 		{"taken", 200, `{"h":"<span class=\"tm-section-header-status tm-status-taken\">Taken</span>"}`, StatusTaken},
 		{"avail auction", 200, `{"h":"<span class=\"tm-section-header-status tm-status-avail\">Sale</span>"}`, StatusAuctioned},
 		{"sold", 200, `{"h":"<span class=\"tm-section-header-status tm-status-unavail\">Sold</span>"}`, StatusSold},
+		{"await is unknown, not taken", 200, `{"h":"<span class=\"tm-section-header-status tm-status-await\">Wait</span>"}`, StatusUnknown},
 		{"unknown no marker", 200, `{"h":"<div>something else</div>"}`, StatusUnknown},
 	}
 	for _, c := range cases {
